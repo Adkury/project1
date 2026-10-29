@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Galaxy Shooter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+<style>
+:root{--bg:#0b0d12;--bg2:#12151c;--ink:#ece9e2;--mut:#8d929e;--line:rgba(255,255,255,.09);--line2:rgba(255,255,255,.17);--accent:#e8c38c;--accent-rgb:232,195,140;--danger:#e58a82;
+--serif:'Instrument Serif',Georgia,'Times New Roman',serif;--sans:'Hanken Grotesk',system-ui,-apple-system,'Segoe UI',sans-serif;--mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.55;min-height:100vh;background-image:radial-gradient(ellipse 60% 40% at 50% -8%,rgba(var(--accent-rgb),.11),transparent 70%)}
+.shell{max-width:1120px;margin:0 auto;padding:36px 20px 56px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent)}
+h1{font-family:var(--serif);font-weight:400;font-size:clamp(40px,6vw,66px);line-height:1;letter-spacing:-.02em;margin:10px 0 0}
+.sub{color:var(--mut);max-width:60ch;margin:12px 0 0}
+.status{display:inline-flex;align-items:center;gap:10px;margin-top:18px;font-family:var(--mono);font-size:12px;color:var(--mut);border:1px solid var(--line);border-radius:999px;padding:6px 14px}
+.status::before{content:"";width:6px;height:6px;border-radius:50%;background:#d9b44a}
+.status.ok::before{background:#7fd1a0}
+.status.err{color:var(--danger)}
+.status.err::before{background:var(--danger)}
+.stage{display:flex;flex-wrap:wrap;gap:24px;margin-top:28px;align-items:flex-start}
+.game{position:relative;flex:1 1 560px;min-width:0;max-width:640px;aspect-ratio:4/3;border-radius:18px;overflow:hidden;border:1px solid var(--line2);background:#07080b;box-shadow:0 30px 70px -40px rgba(0,0,0,.85)}
+.game video,.game canvas{position:absolute;inset:0;width:100%;height:100%}
+.game video{object-fit:fill;transform:scaleX(-1)}
+.dim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(8,9,13,.74),rgba(8,9,13,.84));pointer-events:none}
+.hud{position:absolute;top:14px;left:14px;right:14px;display:flex;gap:10px;align-items:flex-start;pointer-events:none;z-index:2}
+.hud-box{background:rgba(10,12,17,.74);border:1px solid var(--line);border-radius:12px;padding:8px 14px;display:flex;flex-direction:column;gap:3px;min-width:78px}
+.lab{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--mut)}
+.hud-box b{font-family:var(--serif);font-weight:400;font-size:28px;line-height:1;font-variant-numeric:tabular-nums}
+.lives{margin-left:auto;flex-direction:row;align-items:center;gap:7px;padding:14px}
+.lives:empty{display:none}
+.lives i{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--accent)}
+.lives i.on{background:var(--accent)}
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(7,8,12,.8);z-index:5;padding:16px}
+.card{width:min(100%,380px);text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px}
+.card h2{font-family:var(--serif);font-weight:400;font-size:46px;line-height:1;margin:0;letter-spacing:-.02em}
+.card p{margin:0;color:var(--mut);font-size:15px;max-width:36ch}
+#ov-score{font-size:76px;font-variant-numeric:tabular-nums}
+.save{display:flex;flex-direction:column;gap:8px;width:100%;text-align:left;margin-top:6px}
+.btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:6px}
+.btn{font:inherit;font-weight:700;font-size:14px;border-radius:999px;border:1px solid var(--line2);background:transparent;color:var(--ink);padding:11px 24px;cursor:pointer;transition:transform .2s,border-color .2s,background .2s}
+.btn:hover{border-color:var(--accent);transform:translateY(-1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#14110b}
+.btn:disabled{opacity:.5;cursor:default;transform:none}
+.btn:focus-visible,.ib:focus-visible,.link:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input{font:inherit;color:var(--ink);background:rgba(255,255,255,.04);border:1px solid var(--line2);border-radius:10px;padding:10px 12px;min-width:0}
+input::placeholder{color:#6b707c}
+.panel{flex:1 1 300px;min-width:280px;border:1px solid var(--line);border-radius:18px;background:var(--bg2);padding:22px;display:flex;flex-direction:column;gap:16px}
+.panel-h{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+.panel-h h2{font-family:var(--serif);font-weight:400;font-size:34px;line-height:1;margin:6px 0 0}
+.count{font-family:var(--mono);font-size:12px;color:var(--mut)}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.summary>div{background:var(--bg2);padding:10px 12px;display:flex;flex-direction:column;gap:3px}
+.summary b{font-family:var(--serif);font-weight:400;font-size:26px;line-height:1;font-variant-numeric:tabular-nums}
+.add{display:flex;gap:8px;flex-wrap:wrap}
+.add input[type=text]{flex:1 1 110px}
+.add input[type=number]{flex:0 0 84px}
+.add .btn{padding:9px 18px}
+.list{list-style:none;margin:0;padding:0;max-height:320px;overflow:auto;display:flex;flex-direction:column}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:11px 4px;border-top:1px solid var(--line)}
+.rk{width:22px;font-family:var(--mono);font-size:12px;color:var(--mut)}
+.top1 .rk{color:var(--accent)}
+.who{flex:1 1 90px;min-width:0}
+.who b{display:block;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.who small{color:var(--mut);font-size:12px}
+.pt{font-family:var(--serif);font-size:25px;line-height:1;font-variant-numeric:tabular-nums}
+.acts{display:flex;gap:4px;margin-left:auto}
+.ib{font:inherit;font-size:12px;border:1px solid var(--line);background:transparent;color:var(--mut);border-radius:8px;padding:4px 10px;cursor:pointer;transition:color .2s,border-color .2s}
+.ib:hover{color:var(--ink);border-color:var(--line2)}
+.ib.danger:hover,.ib.confirm{border-color:var(--danger);color:var(--danger)}
+.row.editing{display:block}
+.edit{display:flex;gap:6px;flex-wrap:wrap}
+.edit input[name=name]{flex:1 1 100px;padding:7px 10px}
+.edit input[name=score]{flex:0 0 78px;padding:7px 10px}
+.empty{color:var(--mut);font-size:14px;padding:14px 0;border-top:1px solid var(--line)}
+@keyframes flash{from{background:rgba(var(--accent-rgb),.22)}to{background:transparent}}
+.row.flash{animation:flash 1.6s ease-out}
+.panel-f{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--mut)}
+.link{font:inherit;font-size:12px;background:none;border:0;color:var(--mut);cursor:pointer;padding:4px 0;text-decoration:underline;text-underline-offset:3px}
+.link.danger:hover{color:var(--danger)}
+.foot{margin:24px 0 0;font-family:var(--mono);font-size:12px;color:var(--mut)}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body data-game="shooter" style="--accent:#8fd3c4;--accent-rgb:143,211,196">
+
+<main class="shell">
+<header class="top">
+<div class="eyebrow">Gesture Series · 02</div>
+<h1>Galaxy Shooter</h1>
+<p class="sub">Setir pesawat dengan tangan dan tembak meteor dengan gestur mencubit.</p>
+<div id="status" class="status" role="status">Menyiapkan kamera…</div>
+</header>
+<div class="stage">
+<section class="game" aria-label="Area permainan">
+<video id="video" playsinline muted></video>
+<div class="dim"></div>
+<canvas id="canvas" width="640" height="480"></canvas>
+<div class="hud">
+<div class="hud-box"><span class="lab">Skor</span><b id="score">0</b></div>
+<div class="hud-box"><span class="lab">Rekor</span><b id="best">0</b></div>
+<div class="hud-box lives" id="lives"></div>
+</div>
+<div class="overlay" id="overlay">
+<div class="card" id="ov-ready">
+<div class="eyebrow">Siap bermain</div>
+<h2>Galaxy Shooter</h2>
+<p>Geser tangan ke kiri dan kanan untuk menyetir. Temukan jempol dengan jari tengah untuk menembak.</p>
+<button class="btn primary" id="btn-start" type="button" disabled>Menyiapkan kamera…</button>
+</div>
+<div class="card" id="ov-over" hidden>
+<div class="eyebrow">Ronde selesai</div>
+<h2 id="ov-score">0</h2>
+<p id="ov-note"></p>
+<form id="save-form" class="save">
+<label class="lab" for="ov-name">Nama pemain</label>
+<input id="ov-name" type="text" maxlength="20" autocomplete="off" placeholder="Nama kamu">
+<div class="btns"><button class="btn primary" id="btn-save" type="submit">Simpan skor</button><button class="btn" id="btn-again" type="button">Main lagi</button></div>
+</form>
+</div>
+</div>
+</section>
+<aside class="panel" aria-label="Papan skor">
+<div class="panel-h"><div><div class="eyebrow">Data lokal</div><h2>Papan skor</h2></div><span class="count" id="count">0 catatan</span></div>
+<div class="summary">
+<div><span class="lab">Rekor</span><b id="s-best">0</b></div>
+<div><span class="lab">Rata-rata</span><b id="s-avg">0</b></div>
+<div><span class="lab">Ronde</span><b id="s-n">0</b></div>
+</div>
+<form class="add" id="add-form">
+<input id="add-name" type="text" maxlength="20" placeholder="Nama" aria-label="Nama" required>
+<input id="add-score" type="number" min="0" max="99999" placeholder="Skor" aria-label="Skor" required>
+<button class="btn" type="submit">Tambah</button>
+</form>
+<input id="filter" type="text" placeholder="Cari nama…" aria-label="Cari nama" autocomplete="off">
+<ol class="list" id="list"></ol>
+<div class="panel-f"><span>Tersimpan di browser ini.</span><button class="link danger" id="btn-clear" type="button">Hapus semua</button></div>
+</aside>
+</div>
+<p class="foot">Kamera diproses langsung di perangkatmu dan tidak dikirim ke mana pun.</p>
+</main>
+<script>
+function boot(factory){
+  'use strict';
+  var W=640,H=480;
+  function $(id){return document.getElementById(id);}
+  function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  var video=$('video'),canvas=$('canvas'),ctx=canvas.getContext('2d',{desynchronized:true});
+  var statusEl=$('status'),scoreEl=$('score'),bestEl=$('best'),livesEl=$('lives');
+  var overlay=$('overlay'),ovReady=$('ov-ready'),ovOver=$('ov-over'),btnStart=$('btn-start');
+  var nameInput=$('ov-name'),btnSave=$('btn-save'),saveForm=$('save-form');
+  var state='LOADING',saved=false;
+
+  var core={
+    ctx:ctx,W:W,H:H,sx:1,sy:1,score:0,
+    ease:function(f,dt){return 1-Math.pow(1-f,dt);},
+    setScore:function(n){core.score=n;scoreEl.textContent=n;},
+    setLives:function(n,total){var h='';for(var i=0;i<total;i++){h+='<i class="'+(i<n?'on':'')+'"></i>';}livesEl.innerHTML=h;livesEl.setAttribute('aria-label','Nyawa '+n+' dari '+total);},
+    over:function(){endGame();}
+  };
+  var game=factory(core);
+
+  /* ---------- Penyimpanan skor (CRUD) ---------- */
+  var KEY='gesture-skor-'+document.body.getAttribute('data-game');
+  var PKEY='gesture-pemain';
+  var mem=[];
+  function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+  function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+  function cleanName(n){return String(n==null?'':n).replace(/\s+/g,' ').trim().slice(0,20)||'Pemain';}
+  function cleanScore(s){return Math.max(0,Math.min(99999,Math.floor(Number(s)||0)));}
+  function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+  function readAll(){
+    var list=mem,raw=lsGet(KEY);
+    if(raw){try{var p=JSON.parse(raw);if(Array.isArray(p))list=p;}catch(e){}}
+    return list.filter(function(r){return r&&r.id;}).map(function(r){
+      return {id:String(r.id),name:cleanName(r.name),score:cleanScore(r.score),t:Number(r.t)||0};
+    }).sort(function(a,b){return b.score-a.score||a.t-b.t;});
+  }
+  function writeAll(list){mem=list;lsSet(KEY,JSON.stringify(list));}
+  function create(name,score){var rec={id:uid(),name:cleanName(name),score:cleanScore(score),t:Date.now()};var l=readAll();l.push(rec);writeAll(l);return rec;}
+  function update(id,name,score){var l=readAll();for(var i=0;i<l.length;i++){if(l[i].id===id){l[i].name=cleanName(name);l[i].score=cleanScore(score);}}writeAll(l);}
+  function remove(id){writeAll(readAll().filter(function(r){return r.id!==id;}));}
+  function clearAll(){writeAll([]);}
+
+  /* ---------- Panel papan skor ---------- */
+  var listEl=$('list'),filterEl=$('filter'),countEl=$('count'),sBest=$('s-best'),sAvg=$('s-avg'),sN=$('s-n');
+  var clearBtn=$('btn-clear'),addForm=$('add-form'),addName=$('add-name'),addScore=$('add-score');
+  var editingId=null,confirmId=null,flashId=null,clearTimer=0;
+  function fmtDate(t){try{return t?new Date(t).toLocaleDateString('id-ID',{day:'numeric',month:'short'}):'';}catch(e){return '';}}
+  function rowHtml(r,rank){
+    if(r.id===editingId){
+      return '<li class="row editing" data-id="'+esc(r.id)+'"><form class="edit" data-form="save"><input name="name" type="text" maxlength="20" required value="'+esc(r.name)+'" aria-label="Nama"><input name="score" type="number" min="0" max="99999" required value="'+r.score+'" aria-label="Skor"><button class="ib" type="submit">Simpan</button><button class="ib" type="button" data-act="cancel">Batal</button></form></li>';
+    }
+    var acts=(r.id===confirmId)
+      ?'<button class="ib danger confirm" type="button" data-act="del-yes">Yakin?</button><button class="ib" type="button" data-act="cancel">Batal</button>'
+      :'<button class="ib" type="button" data-act="edit">Ubah</button><button class="ib danger" type="button" data-act="del">Hapus</button>';
+    var cls='row'+(rank===1?' top1':'')+(r.id===flashId?' flash':'');
+    return '<li class="'+cls+'" data-id="'+esc(r.id)+'"><span class="rk">'+rank+'</span><div class="who"><b>'+esc(r.name)+'</b><small>'+esc(fmtDate(r.t))+'</small></div><span class="pt">'+r.score+'</span><div class="acts">'+acts+'</div></li>';
+  }
+  function renderPanel(){
+    var all=readAll(),q=filterEl.value.trim().toLowerCase(),sum=0;
+    all.forEach(function(r){sum+=r.score;});
+    var best=all.length?all[0].score:0;
+    sBest.textContent=best;sAvg.textContent=all.length?Math.round(sum/all.length):0;sN.textContent=all.length;
+    countEl.textContent=all.length+' catatan';bestEl.textContent=best;
+    var html='',shown=0;
+    if(!all.length){
+      html='<li class="empty">Belum ada skor. Mainkan satu ronde lalu simpan skormu, atau tambahkan catatan lewat formulir di atas.</li>';
+    }else{
+      all.forEach(function(r,i){
+        if(q&&r.name.toLowerCase().indexOf(q)<0)return;
+        if(shown>=50)return;
+        shown++;html+=rowHtml(r,i+1);
+      });
+      if(!shown)html='<li class="empty">Tidak ada nama yang cocok dengan pencarian.</li>';
+    }
+    listEl.innerHTML=html;
+  }
+  listEl.addEventListener('click',function(e){
+    var b=e.target.closest?e.target.closest('button[data-act]'):null;if(!b)return;
+    var li=b.closest('li[data-id]');if(!li)return;
+    var id=li.getAttribute('data-id'),act=b.getAttribute('data-act');
+    if(act==='edit'){editingId=id;confirmId=null;}
+    else if(act==='cancel'){editingId=null;confirmId=null;}
+    else if(act==='del'){confirmId=id;editingId=null;}
+    else if(act==='del-yes'){remove(id);confirmId=null;}
+    renderPanel();
+    if(act==='edit'){var inp=listEl.querySelector('.editing input[name=name]');if(inp)inp.focus();}
+  });
+  listEl.addEventListener('submit',function(e){
+    e.preventDefault();
+    var f=e.target;if(f.getAttribute('data-form')!=='save')return;
+    var li=f.closest('li[data-id]'),id=li.getAttribute('data-id');
+    update(id,f.elements['name'].value,f.elements['score'].value);
+    editingId=null;flashId=id;renderPanel();
+  });
+  addForm.addEventListener('submit',function(e){
+    e.preventDefault();
+    var rec=create(addName.value,addScore.value);
+    flashId=rec.id;addName.value='';addScore.value='';filterEl.value='';renderPanel();addName.focus();
+  });
+  filterEl.addEventListener('input',renderPanel);
+  function resetClear(){clearBtn.setAttribute('data-sure','0');clearBtn.textContent='Hapus semua';}
+  clearBtn.addEventListener('click',function(){
+    if(!readAll().length)return;
+    if(clearBtn.getAttribute('data-sure')==='1'){clearAll();resetClear();editingId=null;confirmId=null;renderPanel();return;}
+    clearBtn.setAttribute('data-sure','1');clearBtn.textContent='Yakin hapus semua?';
+    clearTimeout(clearTimer);clearTimer=setTimeout(resetClear,3500);
+  });
+
+  /* ---------- Alur permainan ---------- */
+  function showOverlay(mode){
+    overlay.hidden=(mode===null);
+    ovReady.hidden=(mode!=='ready');
+    ovOver.hidden=(mode!=='over');
+  }
+  function startGame(){
+    if(state!=='READY'&&state!=='OVER')return;
+    core.setScore(0);game.reset();state='PLAYING';showOverlay(null);
+  }
+  function endGame(){
+    if(state!=='PLAYING')return;
+    state='OVER';
+    var all=readAll(),best=all.length?all[0].score:0;
+    $('ov-score').textContent=core.score;
+    $('ov-note').textContent=core.score>0&&core.score>best?'Rekor baru. Simpan namamu di papan skor.':(core.score===0?'Skor nol. Coba lagi.':'Simpan skormu atau langsung main lagi.');
+    nameInput.value=lsGet(PKEY)||'';
+    saved=false;btnSave.disabled=false;btnSave.textContent='Simpan skor';
+    showOverlay('over');
+    setTimeout(function(){try{nameInput.focus({preventScroll:true});}catch(e){}},60);
+  }
+  btnStart.addEventListener('click',startGame);
+  $('btn-again').addEventListener('click',startGame);
+  saveForm.addEventListener('submit',function(e){
+    e.preventDefault();if(saved)return;
+    var rec=create(nameInput.value,core.score);
+    lsSet(PKEY,rec.name);saved=true;btnSave.disabled=true;btnSave.textContent='Tersimpan';
+    flashId=rec.id;renderPanel();
+  });
+
+  /* ---------- Kamera dan model tangan (terpisah dari render) ---------- */
+  var model=null,landmarks=null,lastHandTime=0,lastVideoTime=-1,renderCount=0,detCount=0;
+  function getHand(now){return(landmarks&&now-lastHandTime<350)?landmarks:null;}
+  async function setupCamera(){
+    var stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:480},height:{ideal:360},frameRate:{ideal:30},facingMode:'user'},audio:false});
+    video.srcObject=stream;
+    await new Promise(function(r){video.onloadedmetadata=r;});
+    await video.play();
+    core.sx=W/video.videoWidth;core.sy=H/video.videoHeight;
+  }
+  async function setupModel(){
+    var ok=false;
+    try{ok=await tf.setBackend('webgl');}catch(e){}
+    if(!ok)await tf.setBackend('cpu');
+    await tf.ready();
+    model=await handpose.load();
+    await model.estimateHands(video);
+  }
+  async function detectLoop(){
+    if(video.readyState>=2&&video.currentTime!==lastVideoTime){
+      lastVideoTime=video.currentTime;
+      try{
+        var hands=await model.estimateHands(video);
+        if(hands.length>0){landmarks=hands[0].landmarks;lastHandTime=performance.now();}
+        detCount++;
+      }catch(e){console.error(e);}
+    }
+    requestAnimationFrame(detectLoop);
+  }
+  function fail(msg){
+    statusEl.textContent=msg;statusEl.className='status err';
+    btnStart.textContent='Tidak tersedia';
+  }
+  async function init(){
+    try{await setupCamera();}catch(e){console.error(e);fail('Kamera tidak aktif atau izin ditolak. Papan skor tetap bisa dipakai.');return;}
+    statusEl.textContent='Memuat model tangan…';
+    try{await setupModel();}catch(e){console.error(e);fail('Model AI gagal dimuat. Periksa koneksi internet.');return;}
+    state='READY';btnStart.disabled=false;btnStart.textContent='Mulai';
+    detectLoop();
+    setInterval(function(){
+      var be=tf.getBackend();
+      statusEl.className='status'+(be==='webgl'?' ok':'');
+      statusEl.textContent='Game '+renderCount+' FPS · AI '+detCount+' FPS · '+be+(be==='webgl'?'':' (aktifkan hardware acceleration)');
+      renderCount=0;detCount=0;
+    },1000);
+  }
+
+  /* ---------- Loop render ---------- */
+  var lastT=performance.now();
+  function render(now){
+    requestAnimationFrame(render);
+    var dt=(now-lastT)/16.667;lastT=now;
+    if(dt>3)dt=3;if(dt<0)dt=0;
+    renderCount++;
+    ctx.clearRect(0,0,W,H);
+    var hand=getHand(now);
+    if(state==='PLAYING')game.update(dt,now,hand);
+    game.draw(now,hand,state==='PLAYING');
+  }
+
+  core.setScore(0);
+  game.reset();
+  renderPanel();
+  showOverlay('ready');
+  requestAnimationFrame(render);
+  init();
+}
+</script>
+<script>
+boot(function(core){
+  var ctx=core.ctx,W=core.W,H=core.H,ease=core.ease;
+  var MINT='143,211,196',ROSE='233,162,154';
+  var player={x:320,y:416,w:40,h:30,target:320};
+  var lasers=[],enemies=[],parts=[],hp=3,score=0,spawnT=0,lastShot=0,gripping=false;
+  var SPAWN_MS=833,COOL=250,MAXP=120;
+
+  function starLayer(n,rmax,alpha){
+    var c=document.createElement('canvas');c.width=W;c.height=H;
+    var g=c.getContext('2d');
+    for(var i=0;i<n;i++){
+      g.beginPath();g.arc(Math.random()*W,Math.random()*H,Math.random()*rmax+.3,0,6.2832);
+      g.fillStyle='rgba(236,233,226,'+(Math.random()*alpha+.1)+')';g.fill();
+    }
+    return c;
+  }
+  var far=starLayer(60,1,.5),near=starLayer(26,1.6,.8);
+
+  var ship=(function(){
+    var s=100,c=document.createElement('canvas');c.width=c.height=s;
+    var g=c.getContext('2d'),m=50;
+    g.shadowBlur=12;g.shadowColor='rgba('+MINT+',.6)';
+    g.beginPath();g.moveTo(m,m-20);g.lineTo(m+18,m+15);g.lineTo(m,m+8);g.lineTo(m-18,m+15);g.closePath();
+    var gr=g.createLinearGradient(m,m-20,m,m+15);gr.addColorStop(0,'#f2fffb');gr.addColorStop(1,'#6fbfae');
+    g.fillStyle=gr;g.fill();
+    g.shadowBlur=0;g.lineWidth=1.5;g.lineJoin='round';g.strokeStyle='rgba(255,255,255,.8)';g.stroke();
+    return c;
+  })();
+
+  function reset(){
+    score=0;hp=3;core.setLives(3,3);
+    player.x=320;player.target=320;
+    lasers=[];enemies=[];parts=[];spawnT=0;gripping=false;
+  }
+  function spawnEnemy(){
+    enemies.push({x:Math.random()*(W-60)+30,y:-30,r:Math.random()*15+12,v:Math.random()*2+1.5});
+  }
+  function burst(x,y,rgb){
+    for(var i=0;i<12;i++){
+      parts.push({x:x,y:y,vx:(Math.random()-.5)*6,vy:(Math.random()-.5)*6,r:Math.random()*2.5+1,a:1,c:rgb});
+    }
+    if(parts.length>MAXP)parts.splice(0,parts.length-MAXP);
+  }
+  function update(dt,now,hand){
+    gripping=false;
+    if(hand){
+      player.target=W-hand[9][0]*core.sx;
+      var dx=(hand[4][0]-hand[12][0])*core.sx,dy=(hand[4][1]-hand[12][1])*core.sy;
+      gripping=Math.sqrt(dx*dx+dy*dy)<55;
+    }
+    if(gripping&&now-lastShot>COOL){lasers.push({x:player.x,y:player.y-20,v:7.5});lastShot=now;}
+    player.x+=(player.target-player.x)*ease(.2,dt);
+    if(player.x<player.w)player.x=player.w;
+    if(player.x>W-player.w)player.x=W-player.w;
+
+    spawnT+=dt*16.667;
+    if(spawnT>=SPAWN_MS){spawnT-=SPAWN_MS;spawnEnemy();}
+
+    for(var i=lasers.length-1;i>=0;i--){
+      lasers[i].y-=lasers[i].v*dt;
+      if(lasers[i].y<-15)lasers.splice(i,1);
+    }
+    for(i=enemies.length-1;i>=0;i--){
+      var e=enemies[i];e.y+=e.v*dt;
+      var hit=false;
+      for(var j=lasers.length-1;j>=0;j--){
+        var l=lasers[j];
+        var cy=Math.max(l.y,Math.min(l.y+15,e.y));
+        var ax=l.x-e.x,ay=cy-e.y;
+        if(ax*ax+ay*ay<e.r*e.r){
+          burst(e.x,e.y,ROSE);lasers.splice(j,1);
+          score+=10;core.setScore(score);hit=true;break;
+        }
+      }
+      if(hit){enemies.splice(i,1);continue;}
+      var px=e.x-player.x,py=e.y-player.y,rr=e.r+player.w/2;
+      if(px*px+py*py<rr*rr){
+        burst(e.x,e.y,MINT);enemies.splice(i,1);
+        hp--;core.setLives(Math.max(hp,0),3);
+        if(hp<=0){core.over();return;}
+        continue;
+      }
+      if(e.y-e.r>H)enemies.splice(i,1);
+    }
+    for(i=parts.length-1;i>=0;i--){
+      var p=parts[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.a-=.022*dt;
+      if(p.a<=0)parts.splice(i,1);
+    }
+  }
+  function draw(now,hand,playing){
+    var oF=(now*.012)%H,oN=(now*.03)%H;
+    ctx.drawImage(far,0,oF);ctx.drawImage(far,0,oF-H);
+    ctx.drawImage(near,0,oN);ctx.drawImage(near,0,oN-H);
+    if(playing&&gripping){
+      var gx=Math.max(14,Math.min(W-14,player.target));
+      ctx.beginPath();ctx.arc(gx,28,7,0,6.2832);ctx.fillStyle='rgba('+MINT+',.3)';ctx.fill();
+      ctx.lineWidth=1.5;ctx.strokeStyle='rgba('+MINT+',.95)';ctx.stroke();
+    }
+    var i;
+    for(i=0;i<lasers.length;i++){
+      var l=lasers[i];
+      ctx.fillStyle='rgba('+MINT+',.22)';ctx.fillRect(l.x-3,l.y-2,6,19);
+      ctx.fillStyle='#e4fbf5';ctx.fillRect(l.x-1,l.y,2,15);
+    }
+    ctx.lineWidth=1.5;
+    for(i=0;i<enemies.length;i++){
+      var e=enemies[i];
+      ctx.beginPath();ctx.arc(e.x,e.y,e.r,0,6.2832);
+      ctx.fillStyle='rgba('+ROSE+',.10)';ctx.fill();
+      ctx.strokeStyle='rgba('+ROSE+',.85)';ctx.stroke();
+      ctx.beginPath();ctx.arc(e.x,e.y,e.r*.55,0,6.2832);
+      ctx.strokeStyle='rgba('+ROSE+',.3)';ctx.stroke();
+    }
+    for(i=0;i<parts.length;i++){
+      var p=parts[i];
+      ctx.globalAlpha=p.a;ctx.fillStyle='rgb('+p.c+')';
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,6.2832);ctx.fill();
+    }
+    ctx.globalAlpha=1;
+    ctx.drawImage(ship,player.x-50,player.y-50);
+  }
+  return {reset:reset,update:update,draw:draw};
+});
+</script>
+</body>
+</html>
